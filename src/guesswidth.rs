@@ -34,7 +34,10 @@ impl<R: BufRead> GuessWidth<R> {
         let mut rows = Vec::new();
         loop {
             match self.read() {
-                Ok(columns) => rows.push(columns),
+                Ok(columns) => {
+                    eprintln!("{:?}", columns);
+                    rows.push(columns)
+                }
                 Err(_) => break,
             }
         }
@@ -44,10 +47,15 @@ impl<R: BufRead> GuessWidth<R> {
     pub fn scan(&mut self, num: usize) {
         for _ in 0..num {
             let mut buf = String::new();
-            if self.reader.read_line(&mut buf).is_err() {
-                break;
+            match self.reader.read_line(&mut buf) {
+                Ok(0) => break,
+                Ok(_) => self.pre_lines.push(buf),
+                Err(_) => break,
             }
-            self.pre_lines.push(buf);
+            // if self.reader.read_line(&mut buf).is_err() {
+            //     break;
+            // }
+            // self.pre_lines.push(buf);
         }
         self.pos = positions(&self.pre_lines, self.header, self.min_lines);
         if self.limit_split > 0 && self.pos.len() > self.limit_split {
@@ -105,11 +113,11 @@ fn positions(lines: &[String], header: usize, min_lines: usize) -> Vec<usize> {
         }
         blanks = count_blanks(&blanks, line.trim_end_matches(' '));
     }
-    positions(&blanks, min_lines)
+    positions2(&blanks, min_lines)
 }
 
 fn separator_position(lr: &[char], p: usize, pos: &[usize], n: usize) -> usize {
-    if lr[p].is_whitespace() {
+    if p < lr.len() && lr[p].is_whitespace() {
         return p;
     }
     let mut f = p;
@@ -120,7 +128,7 @@ fn separator_position(lr: &[char], p: usize, pos: &[usize], n: usize) -> usize {
     }
     let mut b = p;
     let mut bp = 0;
-    while b > 0 && !lr[b].is_whitespace() {
+    while b > 0 && b < lr.len() && !lr[b].is_whitespace() {
         b -= 1;
         bp += 1;
     }
@@ -150,6 +158,9 @@ fn split(line: &str, pos: &[usize], trim_space: bool) -> Vec<String> {
         let end = separator_position(&chars, p, pos, i);
         result.push(chars[start..end].iter().collect());
         start = end + 1;
+    }
+    if start >= chars.len() {
+        start = chars.len() - 1;
     }
     result.push(chars[start..].iter().collect());
     result
@@ -199,7 +210,7 @@ fn count_blanks(blanks: &[usize], line: &str) -> Vec<usize> {
     new_blanks
 }
 
-fn positions(blanks: &[usize], min_lines: usize) -> Vec<usize> {
+fn positions2(blanks: &[usize], min_lines: usize) -> Vec<usize> {
     let mut positions = Vec::new();
     let mut start = 0;
     let mut end = 0;
