@@ -1,19 +1,35 @@
 use std::io::{self, BufRead};
+use unicode_width::UnicodeWidthChar;
 
-pub struct GuessWidth<R: BufRead> {
-    reader: R,
-    pos: Vec<usize>,
-    pre_lines: Vec<String>,
-    pre_count: usize,
-    scan_num: usize,
-    header: usize,
-    limit_split: usize,
-    min_lines: usize,
-    trim_space: bool,
+pub struct GuessWidth {
+    pub reader: io::BufReader<Box<dyn io::Read>>,
+    pub pos: Vec<usize>,
+    pub pre_lines: Vec<String>,
+    pub pre_count: usize,
+    pub scan_num: usize,
+    pub header: usize,
+    pub limit_split: usize,
+    pub min_lines: usize,
+    pub trim_space: bool,
 }
 
-impl<R: BufRead> GuessWidth<R> {
-    pub fn new(reader: R) -> GuessWidth<R> {
+impl GuessWidth {
+    // pub fn new(reader: R) -> GuessWidth<R> {
+    //     GuessWidth {
+    //         reader,
+    //         pos: Vec::new(),
+    //         pre_lines: Vec::new(),
+    //         pre_count: 0,
+    //         scan_num: 100,
+    //         header: 0,
+    //         limit_split: 0,
+    //         min_lines: 2,
+    //         trim_space: true,
+    //     }
+    // }
+
+    pub fn new_reader(r: Box<dyn io::Read>) -> GuessWidth {
+        let reader = io::BufReader::new(r);
         GuessWidth {
             reader,
             pos: Vec::new(),
@@ -34,28 +50,22 @@ impl<R: BufRead> GuessWidth<R> {
         let mut rows = Vec::new();
         loop {
             match self.read() {
-                Ok(columns) => {
-                    eprintln!("{:?}", columns);
-                    rows.push(columns)
-                }
+                Ok(columns) => rows.push(columns),
                 Err(_) => break,
             }
         }
         rows
     }
 
-    pub fn scan(&mut self, num: usize) {
+    fn scan(&mut self, num: usize) {
         for _ in 0..num {
             let mut buf = String::new();
-            match self.reader.read_line(&mut buf) {
-                Ok(0) => break,
-                Ok(_) => self.pre_lines.push(buf),
-                Err(_) => break,
+            if self.reader.read_line(&mut buf).unwrap() == 0 {
+                break;
             }
-            // if self.reader.read_line(&mut buf).is_err() {
-            //     break;
-            // }
-            // self.pre_lines.push(buf);
+            // let line = String::from_utf8_lossy(&buf).trim_end().to_string();
+            let line = buf.trim_end().to_string();
+            self.pre_lines.push(line);
         }
         self.pos = positions(&self.pre_lines, self.header, self.min_lines);
         if self.limit_split > 0 && self.pos.len() > self.limit_split {
@@ -63,7 +73,7 @@ impl<R: BufRead> GuessWidth<R> {
         }
     }
 
-    pub fn read(&mut self) -> Result<Vec<String>, io::Error> {
+    fn read(&mut self) -> Result<Vec<String>, io::Error> {
         if self.pre_lines.is_empty() {
             self.scan(self.scan_num);
         }
@@ -73,36 +83,20 @@ impl<R: BufRead> GuessWidth<R> {
             line
         } else {
             let mut buf = String::new();
-            if self.reader.read_line(&mut buf).is_err() {
-                return Err(io::Error::new(io::ErrorKind::Other, "EOF"));
+            // self.reader.read_line(&mut buf)?;
+            if self.reader.read_line(&mut buf)? == 0 {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "End of file"));
             }
-            buf
+            // String::from_utf8_lossy(&buf).trim_end().to_string()
+            buf.trim_end().to_string()
         };
         Ok(split(&line, &self.pos, self.trim_space))
     }
 }
 
-pub fn to_table(lines: &[String], header: usize, trim_space: bool) -> Vec<Vec<String>> {
-    let pos = positions(lines, header, 2);
-    to_rows(lines, &pos, trim_space)
-}
-
-pub fn to_table_n(
-    lines: &[String],
-    header: usize,
-    num_split: usize,
-    trim_space: bool,
-) -> Vec<Vec<String>> {
-    let mut pos = positions(lines, header, 2);
-    if pos.len() > num_split {
-        pos.truncate(num_split);
-    }
-    to_rows(lines, &pos, trim_space)
-}
-
 fn positions(lines: &[String], header: usize, min_lines: usize) -> Vec<usize> {
     let mut blanks = Vec::new();
-    let header = if header < 0 { 0 } else { header };
+    // let header = if header < 0 { 0 } else { header };
     for (n, line) in lines.iter().enumerate() {
         if n < header {
             continue;
@@ -111,26 +105,26 @@ fn positions(lines: &[String], header: usize, min_lines: usize) -> Vec<usize> {
             blanks = lookup_blanks(line.trim_end_matches(' '));
             continue;
         }
-        blanks = count_blanks(&blanks, line.trim_end_matches(' '));
+        blanks = count_blanks(&mut blanks, line.trim_end_matches(' '));
     }
-    positions2(&blanks, min_lines)
+    positions_helper(&blanks, min_lines)
 }
 
 fn separator_position(lr: &[char], p: usize, pos: &[usize], n: usize) -> usize {
-    if p < lr.len() && lr[p].is_whitespace() {
+    if lr[p].is_whitespace() {
         return p;
     }
     let mut f = p;
-    let mut fp = 0;
+    // let mut fp = 0;
     while f < lr.len() && !lr[f].is_whitespace() {
         f += 1;
-        fp += 1;
+        // fp += 1;
     }
     let mut b = p;
-    let mut bp = 0;
-    while b > 0 && b < lr.len() && !lr[b].is_whitespace() {
+    // let mut bp = 0;
+    while b > 0 && !lr[b].is_whitespace() {
         b -= 1;
-        bp += 1;
+        // bp += 1;
     }
     if b == pos[n] {
         return f;
@@ -142,85 +136,125 @@ fn separator_position(lr: &[char], p: usize, pos: &[usize], n: usize) -> usize {
         if b == pos[n] {
             return f;
         }
+        if b > pos[n] && b < pos[n + 1] {
+            return b;
+        }
     }
-    0
+    f
 }
 
 fn split(line: &str, pos: &[usize], trim_space: bool) -> Vec<String> {
-    let mut result = Vec::new();
-    let chars: Vec<char> = if trim_space {
-        line.trim().chars().collect()
-    } else {
-        line.chars().collect()
-    };
+    let mut n = 0;
     let mut start = 0;
-    for (i, &p) in pos.iter().enumerate() {
-        let end = separator_position(&chars, p, pos, i);
-        result.push(chars[start..end].iter().collect());
-        start = end + 1;
+    let mut columns = Vec::with_capacity(pos.len() + 1);
+    let lr: Vec<char> = line.chars().collect();
+    let mut w = 0;
+    for p in 0..lr.len() {
+        if n > pos.len() - 1 {
+            start = p;
+            break;
+        }
+        if pos[n] <= w {
+            let end = separator_position(&lr, p, pos, n);
+            if start > end {
+                break;
+            }
+            let col = &line[start..end];
+            let col = if trim_space { col.trim() } else { col };
+            columns.push(col.to_string());
+            n += 1;
+            start = end;
+        }
+        // w += runewidth::str_width(&lr[p].to_string());
+        w += match UnicodeWidthChar::width(lr[p]) {
+            Some(w) => w,
+            None => 0,
+        };
     }
-    if start >= chars.len() {
-        start = chars.len() - 1;
+    if n <= columns.len() {
+        let col = &line[start..];
+        let col = if trim_space { col.trim() } else { col };
+        columns.push(col.to_string());
     }
-    result.push(chars[start..].iter().collect());
-    result
-}
-
-fn to_rows(lines: &[String], pos: &[usize], trim_space: bool) -> Vec<Vec<String>> {
-    lines
-        .iter()
-        .map(|line| split(line, pos, trim_space))
-        .collect()
+    columns
 }
 
 fn lookup_blanks(line: &str) -> Vec<usize> {
     let mut blanks = Vec::new();
-    let mut iter = line.chars().enumerate().peekable();
-    while let Some((i, c)) = iter.next() {
-        if c.is_whitespace() {
-            blanks.push(i);
-            while let Some((_, c)) = iter.peek() {
-                if !c.is_whitespace() {
-                    break;
-                }
-                iter.next();
+    let mut first = true;
+    for c in line.chars() {
+        if c == ' ' {
+            if first {
+                blanks.push(0);
+                continue;
             }
+            blanks.push(1);
+            continue;
         }
+        first = false;
+        blanks.push(0);
+        // if runewidth::str_width(&c.to_string()) == 2 {
+        //     blanks.push(0);
+        // }
+        match UnicodeWidthChar::width(c) {
+            Some(w) => {
+                if w == 2 {
+                    blanks.push(0)
+                }
+            }
+            None => {}
+        };
     }
     blanks
 }
 
-fn count_blanks(blanks: &[usize], line: &str) -> Vec<usize> {
-    let mut new_blanks = Vec::new();
-    let mut iter = line.chars().enumerate().peekable();
-    for &blank in blanks {
-        while let Some((i, c)) = iter.next() {
-            if i == blank {
-                new_blanks.push(blank);
-                while let Some((_, c)) = iter.peek() {
-                    if !c.is_whitespace() {
-                        break;
-                    }
-                    iter.next();
+fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
+    let mut n = 0;
+    // let mut new_blanks = Vec::with_capacity(blanks.len());
+    for c in line.chars() {
+        if n >= blanks.len() {
+            break;
+        }
+        if c == ' ' && blanks[n] > 0 {
+            // new_blanks.push(blanks[n] + 1);
+            blanks[n] += 1;
+        }
+        // else {
+        // new_blanks.push(blanks[n]);
+        // }
+        n += 1;
+        // if runewidth::str_width(&c.to_string()) == 2 {
+        //     n += 1;
+        // }
+        match UnicodeWidthChar::width(c) {
+            Some(w) => {
+                if w == 2 {
+                    n += 1;
                 }
-                break;
+            }
+            None => {}
+        };
+    }
+    // new_blanks
+    blanks.to_vec()
+}
+
+fn positions_helper(blanks: &[usize], min_lines: usize) -> Vec<usize> {
+    let mut max = min_lines;
+    let mut p = 0;
+    let mut pos = Vec::new();
+    for (n, v) in blanks.iter().enumerate() {
+        if *v >= max {
+            max = *v;
+            p = n;
+        }
+        if *v == 0 {
+            max = min_lines;
+            if p > 0 {
+                pos.push(p);
+                p = 0;
             }
         }
     }
-    new_blanks
-}
-
-fn positions2(blanks: &[usize], min_lines: usize) -> Vec<usize> {
-    let mut positions = Vec::new();
-    let mut start = 0;
-    let mut end = 0;
-    for &blank in blanks {
-        if blank - end >= min_lines {
-            positions.push(start);
-            start = blank + 1;
-        }
-        end = blank;
-    }
-    positions.push(start);
-    positions
+    pos
 }
