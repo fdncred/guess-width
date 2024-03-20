@@ -14,20 +14,6 @@ pub struct GuessWidth {
 }
 
 impl GuessWidth {
-    // pub fn new(reader: R) -> GuessWidth<R> {
-    //     GuessWidth {
-    //         reader,
-    //         pos: Vec::new(),
-    //         pre_lines: Vec::new(),
-    //         pre_count: 0,
-    //         scan_num: 100,
-    //         header: 0,
-    //         limit_split: 0,
-    //         min_lines: 2,
-    //         trim_space: true,
-    //     }
-    // }
-
     pub fn new_reader(r: Box<dyn io::Read>) -> GuessWidth {
         let reader = io::BufReader::new(r);
         GuessWidth {
@@ -47,6 +33,7 @@ impl GuessWidth {
         if self.pre_lines.is_empty() {
             self.scan(self.scan_num);
         }
+
         let mut rows = Vec::new();
         loop {
             match self.read() {
@@ -54,6 +41,7 @@ impl GuessWidth {
                 Err(_) => break,
             }
         }
+
         rows
     }
 
@@ -63,10 +51,11 @@ impl GuessWidth {
             if self.reader.read_line(&mut buf).unwrap() == 0 {
                 break;
             }
-            // let line = String::from_utf8_lossy(&buf).trim_end().to_string();
+
             let line = buf.trim_end().to_string();
             self.pre_lines.push(line);
         }
+
         self.pos = positions(&self.pre_lines, self.header, self.min_lines);
         if self.limit_split > 0 && self.pos.len() > self.limit_split {
             self.pos.truncate(self.limit_split);
@@ -77,36 +66,39 @@ impl GuessWidth {
         if self.pre_lines.is_empty() {
             self.scan(self.scan_num);
         }
+
         let line = if self.pre_count < self.pre_lines.len() {
             let line = self.pre_lines[self.pre_count].clone();
             self.pre_count += 1;
             line
         } else {
             let mut buf = String::new();
-            // self.reader.read_line(&mut buf)?;
             if self.reader.read_line(&mut buf)? == 0 {
                 return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "End of file"));
             }
-            // String::from_utf8_lossy(&buf).trim_end().to_string()
+
             buf.trim_end().to_string()
         };
+
         Ok(split(&line, &self.pos, self.trim_space))
     }
 }
 
 fn positions(lines: &[String], header: usize, min_lines: usize) -> Vec<usize> {
     let mut blanks = Vec::new();
-    // let header = if header < 0 { 0 } else { header };
     for (n, line) in lines.iter().enumerate() {
         if n < header {
             continue;
         }
+
         if n == header {
             blanks = lookup_blanks(line.trim_end_matches(' '));
             continue;
         }
+
         blanks = count_blanks(&mut blanks, line.trim_end_matches(' '));
     }
+
     positions_helper(&blanks, min_lines)
 }
 
@@ -114,21 +106,21 @@ fn separator_position(lr: &[char], p: usize, pos: &[usize], n: usize) -> usize {
     if lr[p].is_whitespace() {
         return p;
     }
+
     let mut f = p;
-    // let mut fp = 0;
     while f < lr.len() && !lr[f].is_whitespace() {
         f += 1;
-        // fp += 1;
     }
+
     let mut b = p;
-    // let mut bp = 0;
     while b > 0 && !lr[b].is_whitespace() {
         b -= 1;
-        // bp += 1;
     }
+
     if b == pos[n] {
         return f;
     }
+
     if n < pos.len() - 1 {
         if f == pos[n + 1] {
             return b;
@@ -140,6 +132,7 @@ fn separator_position(lr: &[char], p: usize, pos: &[usize], n: usize) -> usize {
             return b;
         }
     }
+
     f
 }
 
@@ -149,11 +142,13 @@ fn split(line: &str, pos: &[usize], trim_space: bool) -> Vec<String> {
     let mut columns = Vec::with_capacity(pos.len() + 1);
     let lr: Vec<char> = line.chars().collect();
     let mut w = 0;
+
     for p in 0..lr.len() {
         if n > pos.len() - 1 {
             start = p;
             break;
         }
+
         if pos[n] <= w {
             let end = separator_position(&lr, p, pos, n);
             if start > end {
@@ -165,23 +160,26 @@ fn split(line: &str, pos: &[usize], trim_space: bool) -> Vec<String> {
             n += 1;
             start = end;
         }
-        // w += runewidth::str_width(&lr[p].to_string());
+
         w += match UnicodeWidthChar::width(lr[p]) {
             Some(w) => w,
             None => 0,
         };
     }
+
     if n <= columns.len() {
         let col = &line[start..];
         let col = if trim_space { col.trim() } else { col };
         columns.push(col.to_string());
     }
+
     columns
 }
 
 fn lookup_blanks(line: &str) -> Vec<usize> {
     let mut blanks = Vec::new();
     let mut first = true;
+
     for c in line.chars() {
         if c == ' ' {
             if first {
@@ -191,11 +189,9 @@ fn lookup_blanks(line: &str) -> Vec<usize> {
             blanks.push(1);
             continue;
         }
+
         first = false;
         blanks.push(0);
-        // if runewidth::str_width(&c.to_string()) == 2 {
-        //     blanks.push(0);
-        // }
         match UnicodeWidthChar::width(c) {
             Some(w) => {
                 if w == 2 {
@@ -205,27 +201,23 @@ fn lookup_blanks(line: &str) -> Vec<usize> {
             None => {}
         };
     }
+
     blanks
 }
 
 fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
     let mut n = 0;
-    // let mut new_blanks = Vec::with_capacity(blanks.len());
+
     for c in line.chars() {
         if n >= blanks.len() {
             break;
         }
+
         if c == ' ' && blanks[n] > 0 {
-            // new_blanks.push(blanks[n] + 1);
             blanks[n] += 1;
         }
-        // else {
-        // new_blanks.push(blanks[n]);
-        // }
+
         n += 1;
-        // if runewidth::str_width(&c.to_string()) == 2 {
-        //     n += 1;
-        // }
         match UnicodeWidthChar::width(c) {
             Some(w) => {
                 if w == 2 {
@@ -235,7 +227,7 @@ fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
             None => {}
         };
     }
-    // new_blanks
+
     blanks.to_vec()
 }
 
@@ -243,6 +235,7 @@ fn positions_helper(blanks: &[usize], min_lines: usize) -> Vec<usize> {
     let mut max = min_lines;
     let mut p = 0;
     let mut pos = Vec::new();
+
     for (n, v) in blanks.iter().enumerate() {
         if *v >= max {
             max = *v;
