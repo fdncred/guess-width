@@ -10,9 +10,7 @@ fn main() {
     let reader = BufReader::new(cursor);
     let mut gw = GuessWidth::new_reader(Box::new(reader));
     let rows = gw.read_all();
-    // for row in rows {
-    //     println!("{}", row.join(","));
-    // }
+
     let csv_data: Vec<String> = rows
         .iter()
         .map(|inner_vec| {
@@ -53,7 +51,6 @@ mod tests {
         let r = Box::new(std::io::BufReader::new(input.as_bytes())) as Box<dyn std::io::Read>;
         let reader = std::io::BufReader::new(r);
 
-        // let reader = Cursor::new(input);
         let mut guess_width = GuessWidth {
             reader,
             pos: Vec::new(),
@@ -230,6 +227,37 @@ noborus   721971  0.0  0.0  13716  3524 pts/3    R+   10:39   0:00 ps aux";
             vec!["PID", "TTY", "TIME CMD"],
             vec!["302965", "pts/3", "00:00:11 zsh"],
             vec!["709737", "pts/3", "00:00:00 ps"],
+        ];
+        let got = guess_width.read_all();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn test_guess_width_windows_df_trim() {
+        let input = "Filesystem     1K-blocks      Used Available Use% Mounted on
+C:/Apps/Git    998797308 869007000 129790308  88% /
+D:             104792064  17042676  87749388  17% /d";
+
+        let r = Box::new(std::io::BufReader::new(input.as_bytes())) as Box<dyn std::io::Read>;
+        let reader = std::io::BufReader::new(r);
+
+        let mut guess_width = GuessWidth {
+            reader,
+            pos: Vec::new(),
+            pre_lines: Vec::new(),
+            pre_count: 0,
+            scan_num: 100,
+            header: 0,
+            limit_split: 0,
+            min_lines: 2,
+            trim_space: true,
+        };
+
+        #[rustfmt::skip]
+        let want = vec![
+            vec!["Filesystem","1K-blocks","Used","Available","Use%","Mounted on"],
+            vec!["C:/Apps/Git","998797308","869007000","129790308","88%","/"],
+            vec!["D:","104792064","17042676","87749388","17%","/d"],
         ];
         let got = guess_width.read_all();
         assert_eq!(got, want);
