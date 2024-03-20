@@ -1,15 +1,33 @@
+// Attribution: https://github.com/noborus/guesswidth/blob/main/guesswidth.go
+//
+// GuessWidth handles the format as formatted by printf.
+// Spaces exist as delimiters, but spaces are not always delimiters.
+// The width seems to be a fixed length, but it doesn't always fit.
+// GuessWidth finds the column separation position
+// from the reference line(header) and multiple lines(body).
+
 use std::io::{self, BufRead};
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+// GuessWidth reads records from printf-like output.
 pub struct GuessWidth {
     pub reader: io::BufReader<Box<dyn io::Read>>,
+    // pos is a list of separator positions.
     pub pos: Vec<usize>,
+    // pre_lines stores the lines read for scan.
     pub pre_lines: Vec<String>,
+    // pre_count is the number returned by read.
     pub pre_count: usize,
+    // scan_num is the number to scan to analyze.
     pub scan_num: usize,
+    // header is the base line number. It starts from 0.
     pub header: usize,
+    // limit_split is the maximum number of columns to split.
     pub limit_split: usize,
+    // min_lines is the minimum number of lines to recognize as a separator.
+    // 1 if only the header, 2 or more if there is a blank in the body.
     pub min_lines: usize,
+    // trim_space is whether to trim the space in the value.
     pub trim_space: bool,
 }
 
@@ -29,6 +47,8 @@ impl GuessWidth {
         }
     }
 
+    // read_all reads all rows
+    // and returns a two-dimensional slice of rows and columns.
     pub fn read_all(&mut self) -> Vec<Vec<String>> {
         if self.pre_lines.is_empty() {
             self.scan(self.scan_num);
@@ -45,6 +65,7 @@ impl GuessWidth {
         rows
     }
 
+    // scan preReads and parses the lines.
     fn scan(&mut self, num: usize) {
         for _ in 0..num {
             let mut buf = String::new();
@@ -62,6 +83,8 @@ impl GuessWidth {
         }
     }
 
+    // read reads one row and returns a slice of columns.
+    // scan is executed first if it is not preRead.
     fn read(&mut self) -> Result<Vec<String>, io::Error> {
         if self.pre_lines.is_empty() {
             self.scan(self.scan_num);
@@ -84,6 +107,9 @@ impl GuessWidth {
     }
 }
 
+// positions returns separator positions
+// from multiple lines and header line number.
+// Lines before the header line are ignored.
 fn positions(lines: &[String], header: usize, min_lines: usize) -> Vec<usize> {
     let mut blanks = Vec::new();
     for (n, line) in lines.iter().enumerate() {
@@ -176,6 +202,8 @@ fn split(line: &str, pos: &[usize], trim_space: bool) -> Vec<String> {
     columns
 }
 
+// Creates a blank(1) and non-blank(0) slice.
+// Execute for the base line (header line).
 fn lookup_blanks(line: &str) -> Vec<usize> {
     let mut blanks = Vec::new();
     let mut first = true;
@@ -195,19 +223,12 @@ fn lookup_blanks(line: &str) -> Vec<usize> {
         if UnicodeWidthStr::width(c.to_string().as_str()) == 2 {
             blanks.push(0);
         }
-        // match UnicodeWidthChar::width(c) {
-        //     Some(w) => {
-        //         if w == 2 {
-        //             blanks.push(0)
-        //         }
-        //     }
-        //     None => {}
-        // };
     }
 
     blanks
 }
 
+// count up if the line is blank where the reference line was blank.
 fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
     let mut n = 0;
 
@@ -224,19 +245,12 @@ fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
         if UnicodeWidthStr::width(c.to_string().as_str()) == 2 {
             n += 1;
         }
-        // match UnicodeWidthChar::width(c) {
-        //     Some(w) => {
-        //         if w == 2 {
-        //             n += 1;
-        //         }
-        //     }
-        //     None => {}
-        // };
     }
 
     blanks.to_vec()
 }
 
+// Generates a list of separator positions from a blank slice.
 fn positions_helper(blanks: &[usize], min_lines: usize) -> Vec<usize> {
     let mut max = min_lines;
     let mut p = 0;
@@ -258,6 +272,7 @@ fn positions_helper(blanks: &[usize], min_lines: usize) -> Vec<usize> {
     pos
 }
 
+// to_rows returns rows separated by columns.
 #[allow(dead_code)]
 fn to_rows(lines: Vec<String>, pos: Vec<usize>, trim_space: bool) -> Vec<Vec<String>> {
     let mut rows: Vec<Vec<String>> = Vec::with_capacity(lines.len());
@@ -268,12 +283,14 @@ fn to_rows(lines: Vec<String>, pos: Vec<usize>, trim_space: bool) -> Vec<Vec<Str
     rows
 }
 
+// to_table parses a slice of lines and returns a table.
 #[allow(dead_code)]
 pub fn to_table(lines: Vec<String>, header: usize, trim_space: bool) -> Vec<Vec<String>> {
     let pos = positions(&lines, header, 2);
     to_rows(lines, pos, trim_space)
 }
 
+// to_table_n parses a slice of lines and returns a table, but limits the number of splits.
 #[allow(dead_code)]
 pub fn to_table_n(
     lines: Vec<String>,
