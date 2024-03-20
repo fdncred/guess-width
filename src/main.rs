@@ -42,7 +42,7 @@ fn read_lines_into_string() -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::guesswidth::GuessWidth;
+    use crate::guesswidth::{to_table, to_table_n, GuessWidth};
 
     #[test]
     fn test_guess_width_ps() {
@@ -85,7 +85,6 @@ mod tests {
         let r = Box::new(std::io::BufReader::new(input.as_bytes())) as Box<dyn std::io::Read>;
         let reader = std::io::BufReader::new(r);
 
-        // let reader = Cursor::new(input);
         let mut guess_width = GuessWidth {
             reader,
             pos: Vec::new(),
@@ -234,5 +233,44 @@ noborus   721971  0.0  0.0  13716  3524 pts/3    R+   10:39   0:00 ps aux";
         ];
         let got = guess_width.read_all();
         assert_eq!(got, want);
+    }
+
+    #[test]
+    fn test_to_table() {
+        let lines = vec![
+            "   PID TTY          TIME CMD".to_string(),
+            "302965 pts/3    00:00:11 zsh".to_string(),
+            "709737 pts/3    00:00:00 ps".to_string(),
+        ];
+
+        let want = vec![
+            vec!["PID", "TTY", "TIME", "CMD"],
+            vec!["302965", "pts/3", "00:00:11", "zsh"],
+            vec!["709737", "pts/3", "00:00:00", "ps"],
+        ];
+
+        let header = 0;
+        let trim_space = true;
+        let table = to_table(lines, header, trim_space);
+        assert_eq!(table, want);
+    }
+
+    #[test]
+    fn test_to_table_n() {
+        let lines = vec![
+            "2022-12-21T09:50:16+0000 WARN A warning that should be ignored is usually at this level and should be actionable.".to_string(),
+    		"2022-12-21T09:50:17+0000 INFO This is less important than debug log and is often used to provide context in the current task.".to_string(),
+        ];
+
+        let want = vec![
+            vec!["2022-12-21T09:50:16+0000", "WARN", "A warning that should be ignored is usually at this level and should be actionable."],
+            vec!["2022-12-21T09:50:17+0000", "INFO", "This is less important than debug log and is often used to provide context in the current task."],
+        ];
+
+        let header = 0;
+        let trim_space = true;
+        let num_split = 2;
+        let table = to_table_n(lines, header, num_split, trim_space);
+        assert_eq!(table, want);
     }
 }

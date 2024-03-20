@@ -1,5 +1,5 @@
 use std::io::{self, BufRead};
-use unicode_width::UnicodeWidthChar;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 pub struct GuessWidth {
     pub reader: io::BufReader<Box<dyn io::Read>>,
@@ -192,14 +192,17 @@ fn lookup_blanks(line: &str) -> Vec<usize> {
 
         first = false;
         blanks.push(0);
-        match UnicodeWidthChar::width(c) {
-            Some(w) => {
-                if w == 2 {
-                    blanks.push(0)
-                }
-            }
-            None => {}
-        };
+        if UnicodeWidthStr::width(c.to_string().as_str()) == 2 {
+            blanks.push(0);
+        }
+        // match UnicodeWidthChar::width(c) {
+        //     Some(w) => {
+        //         if w == 2 {
+        //             blanks.push(0)
+        //         }
+        //     }
+        //     None => {}
+        // };
     }
 
     blanks
@@ -218,14 +221,17 @@ fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
         }
 
         n += 1;
-        match UnicodeWidthChar::width(c) {
-            Some(w) => {
-                if w == 2 {
-                    n += 1;
-                }
-            }
-            None => {}
-        };
+        if UnicodeWidthStr::width(c.to_string().as_str()) == 2 {
+            n += 1;
+        }
+        // match UnicodeWidthChar::width(c) {
+        //     Some(w) => {
+        //         if w == 2 {
+        //             n += 1;
+        //         }
+        //     }
+        //     None => {}
+        // };
     }
 
     blanks.to_vec()
@@ -250,4 +256,34 @@ fn positions_helper(blanks: &[usize], min_lines: usize) -> Vec<usize> {
         }
     }
     pos
+}
+
+#[allow(dead_code)]
+fn to_rows(lines: Vec<String>, pos: Vec<usize>, trim_space: bool) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = Vec::with_capacity(lines.len());
+    for line in lines {
+        let columns = split(&line, &pos, trim_space);
+        rows.push(columns);
+    }
+    rows
+}
+
+#[allow(dead_code)]
+pub fn to_table(lines: Vec<String>, header: usize, trim_space: bool) -> Vec<Vec<String>> {
+    let pos = positions(&lines, header, 2);
+    to_rows(lines, pos, trim_space)
+}
+
+#[allow(dead_code)]
+pub fn to_table_n(
+    lines: Vec<String>,
+    header: usize,
+    num_split: usize,
+    trim_space: bool,
+) -> Vec<Vec<String>> {
+    let mut pos = positions(&lines, header, 2);
+    if pos.len() > num_split {
+        pos.truncate(num_split);
+    }
+    to_rows(lines, pos, trim_space)
 }
