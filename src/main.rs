@@ -1,6 +1,6 @@
-mod guesswidth;
+mod guess_width;
 
-use guesswidth::GuessWidth;
+use guess_width::GuessWidth;
 use std::io::{BufRead, BufReader, Cursor};
 
 fn main() {
@@ -40,7 +40,7 @@ fn read_lines_into_string() -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::guesswidth::{to_table, to_table_n, GuessWidth};
+    use crate::guess_width::{to_table, to_table_n, GuessWidth};
 
     #[test]
     fn test_guess_width_ps() {

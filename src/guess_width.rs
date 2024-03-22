@@ -1,4 +1,5 @@
 // Attribution: https://github.com/noborus/guesswidth/blob/main/guesswidth.go
+// The MIT License (MIT) as of 2024-03-22
 //
 // GuessWidth handles the format as formatted by printf.
 // Spaces exist as delimiters, but spaces are not always delimiters.
@@ -6,6 +7,24 @@
 // GuessWidth finds the column separation position
 // from the reference line(header) and multiple lines(body).
 
+// Briefly, the algorithm uses a histogram of spaces to find widths.
+// blanks, lines, and pos are variables used in the algorithm. The other
+// items names below are just for reference.
+// blanks =  0000003000113333111100003000
+//  lines = "   PID TTY          TIME CMD"
+//          "302965 pts/3    00:00:11 zsh"
+//          "709737 pts/3    00:00:00 ps"
+//
+// measure= "012345678901234567890123456789"
+// spaces = "      ^        ^        ^"
+//    pos =  6 15 24 <- the carets show these positions
+// the items in pos map to 3's in the blanks array
+
+// Now that we have pos, we can let split() use this pos array to figure out
+// how to split all lines by comparing each index to see if there's a space.
+// So, it looks at position 6, 15, 24 and sees if it has a space in those
+// positions. If it does, it splits the line there. If it doesn't, it wiggles
+// around the position to find the next space and splits there.
 use std::io::{self, BufRead};
 use unicode_width::UnicodeWidthStr;
 
