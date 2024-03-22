@@ -55,13 +55,9 @@ impl GuessWidth {
         }
 
         let mut rows = Vec::new();
-        loop {
-            match self.read() {
-                Ok(columns) => rows.push(columns),
-                Err(_) => break,
-            }
+        while let Ok(columns) = self.read() {
+            rows.push(columns);
         }
-
         rows
     }
 
@@ -90,20 +86,19 @@ impl GuessWidth {
             self.scan(self.scan_num);
         }
 
-        let line = if self.pre_count < self.pre_lines.len() {
-            let line = self.pre_lines[self.pre_count].clone();
+        if self.pre_count < self.pre_lines.len() {
+            let line = &self.pre_lines[self.pre_count];
             self.pre_count += 1;
-            line
+            Ok(split(line, &self.pos, self.trim_space))
         } else {
             let mut buf = String::new();
             if self.reader.read_line(&mut buf)? == 0 {
                 return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "End of file"));
             }
 
-            buf.trim_end().to_string()
-        };
-
-        Ok(split(&line, &self.pos, self.trim_space))
+            let line = buf.trim_end().to_string();
+            Ok(split(&line, &self.pos, self.trim_space))
+        }
     }
 }
 
@@ -122,7 +117,7 @@ fn positions(lines: &[String], header: usize, min_lines: usize) -> Vec<usize> {
             continue;
         }
 
-        blanks = count_blanks(&mut blanks, line.trim_end_matches(' '));
+        count_blanks(&mut blanks, line.trim_end_matches(' '));
     }
 
     positions_helper(&blanks, min_lines)
@@ -190,12 +185,10 @@ fn split(line: &str, pos: &[usize], trim_space: bool) -> Vec<String> {
         w += UnicodeWidthStr::width(lr[p].to_string().as_str());
     }
 
-    if n <= columns.len() {
-        let col = &line[start..];
-        let col = if trim_space { col.trim() } else { col };
-        columns.push(col.to_string());
-    }
-
+    // add last part.
+    let col = &line[start..];
+    let col = if trim_space { col.trim() } else { col };
+    columns.push(col.to_string());
     columns
 }
 
@@ -226,7 +219,7 @@ fn lookup_blanks(line: &str) -> Vec<usize> {
 }
 
 // count up if the line is blank where the reference line was blank.
-fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
+fn count_blanks(blanks: &mut [usize], line: &str) {
     let mut n = 0;
 
     for c in line.chars() {
@@ -243,8 +236,6 @@ fn count_blanks(blanks: &mut [usize], line: &str) -> Vec<usize> {
             n += 1;
         }
     }
-
-    blanks.to_vec()
 }
 
 // Generates a list of separator positions from a blank slice.
