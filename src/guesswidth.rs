@@ -7,7 +7,7 @@
 // from the reference line(header) and multiple lines(body).
 
 use std::io::{self, BufRead};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
 
 // GuessWidth reads records from printf-like output.
 pub struct GuessWidth {
@@ -187,10 +187,7 @@ fn split(line: &str, pos: &[usize], trim_space: bool) -> Vec<String> {
             start = end;
         }
 
-        w += match UnicodeWidthChar::width(lr[p]) {
-            Some(w) => w,
-            None => 0,
-        };
+        w += UnicodeWidthStr::width(lr[p].to_string().as_str());
     }
 
     if n <= columns.len() {
