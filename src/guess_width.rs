@@ -28,6 +28,14 @@
 use std::io::{self, BufRead};
 use unicode_width::UnicodeWidthStr;
 
+// scan_num is the number to scan to analyze.
+const SCAN_NUM: u8 = 128;
+// min_lines is the minimum number of lines to recognize as a separator.
+// 1 if only the header, 2 or more if there is a blank in the body.
+const MIN_LINES: usize = 2;
+// trim_space is whether to trim the space in the value.
+const TRIM_SPACE: bool = true;
+
 // GuessWidth reads records from printf-like output.
 pub struct GuessWidth {
     pub reader: io::BufReader<Box<dyn io::Read>>,
@@ -37,17 +45,10 @@ pub struct GuessWidth {
     pub pre_lines: Vec<String>,
     // pre_count is the number returned by read.
     pub pre_count: usize,
-    // scan_num is the number to scan to analyze.
-    pub scan_num: usize,
     // header is the base line number. It starts from 0.
     pub header: usize,
     // limit_split is the maximum number of columns to split.
     pub limit_split: usize,
-    // min_lines is the minimum number of lines to recognize as a separator.
-    // 1 if only the header, 2 or more if there is a blank in the body.
-    pub min_lines: usize,
-    // trim_space is whether to trim the space in the value.
-    pub trim_space: bool,
 }
 
 impl GuessWidth {
@@ -58,11 +59,8 @@ impl GuessWidth {
             pos: Vec::new(),
             pre_lines: Vec::new(),
             pre_count: 0,
-            scan_num: 100,
             header: 0,
             limit_split: 0,
-            min_lines: 2,
-            trim_space: true,
         }
     }
 
@@ -70,7 +68,7 @@ impl GuessWidth {
     // and returns a two-dimensional slice of rows and columns.
     pub fn read_all(&mut self) -> Vec<Vec<String>> {
         if self.pre_lines.is_empty() {
-            self.scan(self.scan_num);
+            self.scan(SCAN_NUM);
         }
 
         let mut rows = Vec::new();
@@ -81,7 +79,7 @@ impl GuessWidth {
     }
 
     // scan preReads and parses the lines.
-    fn scan(&mut self, num: usize) {
+    fn scan(&mut self, num: u8) {
         for _ in 0..num {
             let mut buf = String::new();
             if self.reader.read_line(&mut buf).unwrap() == 0 {
@@ -92,7 +90,7 @@ impl GuessWidth {
             self.pre_lines.push(line);
         }
 
-        self.pos = positions(&self.pre_lines, self.header, self.min_lines);
+        self.pos = positions(&self.pre_lines, self.header, MIN_LINES);
         if self.limit_split > 0 && self.pos.len() > self.limit_split {
             self.pos.truncate(self.limit_split);
         }
@@ -102,13 +100,13 @@ impl GuessWidth {
     // scan is executed first if it is not preRead.
     fn read(&mut self) -> Result<Vec<String>, io::Error> {
         if self.pre_lines.is_empty() {
-            self.scan(self.scan_num);
+            self.scan(SCAN_NUM);
         }
 
         if self.pre_count < self.pre_lines.len() {
             let line = &self.pre_lines[self.pre_count];
             self.pre_count += 1;
-            Ok(split(line, &self.pos, self.trim_space))
+            Ok(split(line, &self.pos, TRIM_SPACE))
         } else {
             let mut buf = String::new();
             if self.reader.read_line(&mut buf)? == 0 {
@@ -116,7 +114,7 @@ impl GuessWidth {
             }
 
             let line = buf.trim_end().to_string();
-            Ok(split(&line, &self.pos, self.trim_space))
+            Ok(split(&line, &self.pos, TRIM_SPACE))
         }
     }
 }
