@@ -1,53 +1,54 @@
-// Attribution: https://github.com/noborus/guesswidth/blob/main/guesswidth.go
-// The MIT License (MIT) as of 2024-03-22
-//
-// GuessWidth handles the format as formatted by printf.
-// Spaces exist as delimiters, but spaces are not always delimiters.
-// The width seems to be a fixed length, but it doesn't always fit.
-// GuessWidth finds the column separation position
-// from the reference line(header) and multiple lines(body).
+/// Attribution: https://github.com/noborus/guesswidth/blob/main/guesswidth.go
+/// The MIT License (MIT) as of 2024-03-22
+///
+/// GuessWidth handles the format as formatted by printf.
+/// Spaces exist as delimiters, but spaces are not always delimiters.
+/// The width seems to be a fixed length, but it doesn't always fit.
+/// GuessWidth finds the column separation position
+/// from the reference line(header) and multiple lines(body).
 
-// Briefly, the algorithm uses a histogram of spaces to find widths.
-// blanks, lines, and pos are variables used in the algorithm. The other
-// items names below are just for reference.
-// blanks =  0000003000113333111100003000
-//  lines = "   PID TTY          TIME CMD"
-//          "302965 pts/3    00:00:11 zsh"
-//          "709737 pts/3    00:00:00 ps"
-//
-// measure= "012345678901234567890123456789"
-// spaces = "      ^        ^        ^"
-//    pos =  6 15 24 <- the carets show these positions
-// the items in pos map to 3's in the blanks array
+/// Briefly, the algorithm uses a histogram of spaces to find widths.
+/// blanks, lines, and pos are variables used in the algorithm. The other
+/// items names below are just for reference.
+/// blanks =  0000003000113333111100003000
+///  lines = "   PID TTY          TIME CMD"
+///          "302965 pts/3    00:00:11 zsh"
+///          "709737 pts/3    00:00:00 ps"
+///
+/// measure= "012345678901234567890123456789"
+/// spaces = "      ^        ^        ^"
+///    pos =  6 15 24 <- the carets show these positions
+/// the items in pos map to 3's in the blanks array
 
-// Now that we have pos, we can let split() use this pos array to figure out
-// how to split all lines by comparing each index to see if there's a space.
-// So, it looks at position 6, 15, 24 and sees if it has a space in those
-// positions. If it does, it splits the line there. If it doesn't, it wiggles
-// around the position to find the next space and splits there.
+/// Now that we have pos, we can let split() use this pos array to figure out
+/// how to split all lines by comparing each index to see if there's a space.
+/// So, it looks at position 6, 15, 24 and sees if it has a space in those
+/// positions. If it does, it splits the line there. If it doesn't, it wiggles
+/// around the position to find the next space and splits there.
 use std::io::{self, BufRead};
 use unicode_width::UnicodeWidthStr;
 
-// GuessWidth reads records from printf-like output.
+/// the number to scan to analyze.
+const SCAN_NUM: u8 = 128;
+/// the minimum number of lines to recognize as a separator.
+/// 1 if only the header, 2 or more if there is a blank in the body.
+const MIN_LINES: usize = 2;
+/// whether to trim the space in the value.
+const TRIM_SPACE: bool = true;
+
+/// GuessWidth reads records from printf-like output.
 pub struct GuessWidth {
-    pub reader: io::BufReader<Box<dyn io::Read>>,
-    // pos is a list of separator positions.
-    pub pos: Vec<usize>,
-    // pre_lines stores the lines read for scan.
-    pub pre_lines: Vec<String>,
-    // pre_count is the number returned by read.
-    pub pre_count: usize,
-    // scan_num is the number to scan to analyze.
-    pub scan_num: usize,
-    // header is the base line number. It starts from 0.
-    pub header: usize,
-    // limit_split is the maximum number of columns to split.
-    pub limit_split: usize,
-    // min_lines is the minimum number of lines to recognize as a separator.
-    // 1 if only the header, 2 or more if there is a blank in the body.
-    pub min_lines: usize,
-    // trim_space is whether to trim the space in the value.
-    pub trim_space: bool,
+    pub(crate) reader: io::BufReader<Box<dyn io::Read>>,
+    // a list of separator positions.
+    pub(crate) pos: Vec<usize>,
+    // stores the lines read for scan.
+    pub(crate) pre_lines: Vec<String>,
+    // the number returned by read.
+    pub(crate) pre_count: usize,
+    // the base line number. It starts from 0.
+    pub(crate) header: usize,
+    // the maximum number of columns to split.
+    pub(crate) limit_split: usize,
 }
 
 impl GuessWidth {
@@ -58,19 +59,16 @@ impl GuessWidth {
             pos: Vec::new(),
             pre_lines: Vec::new(),
             pre_count: 0,
-            scan_num: 100,
             header: 0,
             limit_split: 0,
-            min_lines: 2,
-            trim_space: true,
         }
     }
 
-    // read_all reads all rows
-    // and returns a two-dimensional slice of rows and columns.
+    /// read_all reads all rows
+    /// and returns a two-dimensional slice of rows and columns.
     pub fn read_all(&mut self) -> Vec<Vec<String>> {
         if self.pre_lines.is_empty() {
-            self.scan(self.scan_num);
+            self.scan(SCAN_NUM);
         }
 
         let mut rows = Vec::new();
@@ -80,8 +78,8 @@ impl GuessWidth {
         rows
     }
 
-    // scan preReads and parses the lines.
-    fn scan(&mut self, num: usize) {
+    /// scan preReads and parses the lines.
+    fn scan(&mut self, num: u8) {
         for _ in 0..num {
             let mut buf = String::new();
             if self.reader.read_line(&mut buf).unwrap() == 0 {
@@ -92,23 +90,23 @@ impl GuessWidth {
             self.pre_lines.push(line);
         }
 
-        self.pos = positions(&self.pre_lines, self.header, self.min_lines);
+        self.pos = positions(&self.pre_lines, self.header, MIN_LINES);
         if self.limit_split > 0 && self.pos.len() > self.limit_split {
             self.pos.truncate(self.limit_split);
         }
     }
 
-    // read reads one row and returns a slice of columns.
-    // scan is executed first if it is not preRead.
+    /// read reads one row and returns a slice of columns.
+    /// scan is executed first if it is not preRead.
     fn read(&mut self) -> Result<Vec<String>, io::Error> {
         if self.pre_lines.is_empty() {
-            self.scan(self.scan_num);
+            self.scan(SCAN_NUM);
         }
 
         if self.pre_count < self.pre_lines.len() {
             let line = &self.pre_lines[self.pre_count];
             self.pre_count += 1;
-            Ok(split(line, &self.pos, self.trim_space))
+            Ok(split(line, &self.pos, TRIM_SPACE))
         } else {
             let mut buf = String::new();
             if self.reader.read_line(&mut buf)? == 0 {
@@ -116,7 +114,7 @@ impl GuessWidth {
             }
 
             let line = buf.trim_end().to_string();
-            Ok(split(&line, &self.pos, self.trim_space))
+            Ok(split(&line, &self.pos, TRIM_SPACE))
         }
     }
 }
@@ -310,4 +308,162 @@ pub fn to_table_n(
         pos.truncate(num_split);
     }
     to_rows(lines, pos, trim_space)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::guess_width::{to_table, to_table_n, GuessWidth};
+
+    #[test]
+    fn test_guess_width_ps_trim() {
+        let input = "   PID TTY          TIME CMD
+302965 pts/3    00:00:11 zsh
+709737 pts/3    00:00:00 ps";
+
+        let r = Box::new(std::io::BufReader::new(input.as_bytes())) as Box<dyn std::io::Read>;
+        let reader = std::io::BufReader::new(r);
+
+        let mut guess_width = GuessWidth {
+            reader,
+            pos: Vec::new(),
+            pre_lines: Vec::new(),
+            pre_count: 0,
+            header: 0,
+            limit_split: 0,
+        };
+
+        #[rustfmt::skip]
+        let want = vec![
+            vec!["PID", "TTY", "TIME", "CMD"],
+            vec!["302965", "pts/3", "00:00:11", "zsh"],
+            vec!["709737", "pts/3", "00:00:00", "ps"],
+        ];
+        let got = guess_width.read_all();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn test_guess_width_ps_overflow_trim() {
+        let input = "USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+root           1  0.0  0.0 168576 13788 ?        Ss   Mar11   0:49 /sbin/init splash
+noborus   703052  2.1  0.7 1184814400 230920 ?   Sl   10:03   0:45 /opt/google/chrome/chrome
+noborus   721971  0.0  0.0  13716  3524 pts/3    R+   10:39   0:00 ps aux";
+
+        let r = Box::new(std::io::BufReader::new(input.as_bytes())) as Box<dyn std::io::Read>;
+        let reader = std::io::BufReader::new(r);
+
+        let mut guess_width = GuessWidth {
+            reader,
+            pos: Vec::new(),
+            pre_lines: Vec::new(),
+            pre_count: 0,
+            header: 0,
+            limit_split: 0,
+        };
+
+        #[rustfmt::skip]
+        let want = vec![
+            vec!["USER", "PID", "%CPU", "%MEM", "VSZ", "RSS", "TTY", "STAT", "START", "TIME", "COMMAND"],
+            vec!["root", "1", "0.0", "0.0", "168576", "13788", "?", "Ss", "Mar11", "0:49", "/sbin/init splash"],
+            vec!["noborus", "703052", "2.1", "0.7", "1184814400", "230920", "?", "Sl", "10:03", "0:45", "/opt/google/chrome/chrome"],
+            vec!["noborus", "721971", "0.0", "0.0", "13716", "3524", "pts/3", "R+", "10:39", "0:00", "ps aux"],
+        ];
+        let got = guess_width.read_all();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn test_guess_width_ps_limit_trim() {
+        let input = "   PID TTY          TIME CMD
+302965 pts/3    00:00:11 zsh
+709737 pts/3    00:00:00 ps";
+
+        let r = Box::new(std::io::BufReader::new(input.as_bytes())) as Box<dyn std::io::Read>;
+        let reader = std::io::BufReader::new(r);
+
+        let mut guess_width = GuessWidth {
+            reader,
+            pos: Vec::new(),
+            pre_lines: Vec::new(),
+            pre_count: 0,
+            header: 0,
+            limit_split: 2,
+        };
+
+        #[rustfmt::skip]
+        let want = vec![
+            vec!["PID", "TTY", "TIME CMD"],
+            vec!["302965", "pts/3", "00:00:11 zsh"],
+            vec!["709737", "pts/3", "00:00:00 ps"],
+        ];
+        let got = guess_width.read_all();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn test_guess_width_windows_df_trim() {
+        let input = "Filesystem     1K-blocks      Used Available Use% Mounted on
+C:/Apps/Git    998797308 869007000 129790308  88% /
+D:             104792064  17042676  87749388  17% /d";
+
+        let r = Box::new(std::io::BufReader::new(input.as_bytes())) as Box<dyn std::io::Read>;
+        let reader = std::io::BufReader::new(r);
+
+        let mut guess_width = GuessWidth {
+            reader,
+            pos: Vec::new(),
+            pre_lines: Vec::new(),
+            pre_count: 0,
+            header: 0,
+            limit_split: 0,
+        };
+
+        #[rustfmt::skip]
+        let want = vec![
+            vec!["Filesystem","1K-blocks","Used","Available","Use%","Mounted on"],
+            vec!["C:/Apps/Git","998797308","869007000","129790308","88%","/"],
+            vec!["D:","104792064","17042676","87749388","17%","/d"],
+        ];
+        let got = guess_width.read_all();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn test_to_table() {
+        let lines = vec![
+            "   PID TTY          TIME CMD".to_string(),
+            "302965 pts/3    00:00:11 zsh".to_string(),
+            "709737 pts/3    00:00:00 ps".to_string(),
+        ];
+
+        let want = vec![
+            vec!["PID", "TTY", "TIME", "CMD"],
+            vec!["302965", "pts/3", "00:00:11", "zsh"],
+            vec!["709737", "pts/3", "00:00:00", "ps"],
+        ];
+
+        let header = 0;
+        let trim_space = true;
+        let table = to_table(lines, header, trim_space);
+        assert_eq!(table, want);
+    }
+
+    #[test]
+    fn test_to_table_n() {
+        let lines = vec![
+            "2022-12-21T09:50:16+0000 WARN A warning that should be ignored is usually at this level and should be actionable.".to_string(),
+    		"2022-12-21T09:50:17+0000 INFO This is less important than debug log and is often used to provide context in the current task.".to_string(),
+        ];
+
+        let want = vec![
+            vec!["2022-12-21T09:50:16+0000", "WARN", "A warning that should be ignored is usually at this level and should be actionable."],
+            vec!["2022-12-21T09:50:17+0000", "INFO", "This is less important than debug log and is often used to provide context in the current task."],
+        ];
+
+        let header = 0;
+        let trim_space = true;
+        let num_split = 2;
+        let table = to_table_n(lines, header, num_split, trim_space);
+        assert_eq!(table, want);
+    }
 }
