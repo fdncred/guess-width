@@ -1,54 +1,54 @@
-// Attribution: https://github.com/noborus/guesswidth/blob/main/guesswidth.go
-// The MIT License (MIT) as of 2024-03-22
-//
-// GuessWidth handles the format as formatted by printf.
-// Spaces exist as delimiters, but spaces are not always delimiters.
-// The width seems to be a fixed length, but it doesn't always fit.
-// GuessWidth finds the column separation position
-// from the reference line(header) and multiple lines(body).
+/// Attribution: https://github.com/noborus/guesswidth/blob/main/guesswidth.go
+/// The MIT License (MIT) as of 2024-03-22
+///
+/// GuessWidth handles the format as formatted by printf.
+/// Spaces exist as delimiters, but spaces are not always delimiters.
+/// The width seems to be a fixed length, but it doesn't always fit.
+/// GuessWidth finds the column separation position
+/// from the reference line(header) and multiple lines(body).
 
-// Briefly, the algorithm uses a histogram of spaces to find widths.
-// blanks, lines, and pos are variables used in the algorithm. The other
-// items names below are just for reference.
-// blanks =  0000003000113333111100003000
-//  lines = "   PID TTY          TIME CMD"
-//          "302965 pts/3    00:00:11 zsh"
-//          "709737 pts/3    00:00:00 ps"
-//
-// measure= "012345678901234567890123456789"
-// spaces = "      ^        ^        ^"
-//    pos =  6 15 24 <- the carets show these positions
-// the items in pos map to 3's in the blanks array
+/// Briefly, the algorithm uses a histogram of spaces to find widths.
+/// blanks, lines, and pos are variables used in the algorithm. The other
+/// items names below are just for reference.
+/// blanks =  0000003000113333111100003000
+///  lines = "   PID TTY          TIME CMD"
+///          "302965 pts/3    00:00:11 zsh"
+///          "709737 pts/3    00:00:00 ps"
+///
+/// measure= "012345678901234567890123456789"
+/// spaces = "      ^        ^        ^"
+///    pos =  6 15 24 <- the carets show these positions
+/// the items in pos map to 3's in the blanks array
 
-// Now that we have pos, we can let split() use this pos array to figure out
-// how to split all lines by comparing each index to see if there's a space.
-// So, it looks at position 6, 15, 24 and sees if it has a space in those
-// positions. If it does, it splits the line there. If it doesn't, it wiggles
-// around the position to find the next space and splits there.
+/// Now that we have pos, we can let split() use this pos array to figure out
+/// how to split all lines by comparing each index to see if there's a space.
+/// So, it looks at position 6, 15, 24 and sees if it has a space in those
+/// positions. If it does, it splits the line there. If it doesn't, it wiggles
+/// around the position to find the next space and splits there.
 use std::io::{self, BufRead};
 use unicode_width::UnicodeWidthStr;
 
-// scan_num is the number to scan to analyze.
+/// the number to scan to analyze.
 const SCAN_NUM: u8 = 128;
-// min_lines is the minimum number of lines to recognize as a separator.
-// 1 if only the header, 2 or more if there is a blank in the body.
+/// the minimum number of lines to recognize as a separator.
+/// 1 if only the header, 2 or more if there is a blank in the body.
 const MIN_LINES: usize = 2;
-// trim_space is whether to trim the space in the value.
+/// whether to trim the space in the value.
 const TRIM_SPACE: bool = true;
 
-// GuessWidth reads records from printf-like output.
+/// GuessWidth reads records from printf-like output.
 pub struct GuessWidth {
-    pub reader: io::BufReader<Box<dyn io::Read>>,
-    // pos is a list of separator positions.
-    pub pos: Vec<usize>,
-    // pre_lines stores the lines read for scan.
-    pub pre_lines: Vec<String>,
-    // pre_count is the number returned by read.
-    pub pre_count: usize,
-    // header is the base line number. It starts from 0.
-    pub header: usize,
-    // limit_split is the maximum number of columns to split.
-    pub limit_split: usize,
+    pub(crate) reader: io::BufReader<Box<dyn io::Read>>,
+    // a list of separator positions.
+    pub(crate) pos: Vec<usize>,
+    // stores the lines read for scan.
+    pub(crate) pre_lines: Vec<String>,
+    // the number returned by read.
+    pub(crate) pre_count: usize,
+    // the base line number. It starts from 0.
+    pub(crate) header: usize,
+    // the maximum number of columns to split.
+    pub(crate) limit_split: usize,
 }
 
 impl GuessWidth {
@@ -64,8 +64,8 @@ impl GuessWidth {
         }
     }
 
-    // read_all reads all rows
-    // and returns a two-dimensional slice of rows and columns.
+    /// read_all reads all rows
+    /// and returns a two-dimensional slice of rows and columns.
     pub fn read_all(&mut self) -> Vec<Vec<String>> {
         if self.pre_lines.is_empty() {
             self.scan(SCAN_NUM);
@@ -78,7 +78,7 @@ impl GuessWidth {
         rows
     }
 
-    // scan preReads and parses the lines.
+    /// scan preReads and parses the lines.
     fn scan(&mut self, num: u8) {
         for _ in 0..num {
             let mut buf = String::new();
@@ -96,8 +96,8 @@ impl GuessWidth {
         }
     }
 
-    // read reads one row and returns a slice of columns.
-    // scan is executed first if it is not preRead.
+    /// read reads one row and returns a slice of columns.
+    /// scan is executed first if it is not preRead.
     fn read(&mut self) -> Result<Vec<String>, io::Error> {
         if self.pre_lines.is_empty() {
             self.scan(SCAN_NUM);
