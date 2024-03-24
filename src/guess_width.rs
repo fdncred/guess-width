@@ -35,6 +35,8 @@ const SCAN_NUM: u8 = 128;
 const MIN_LINES: usize = 2;
 /// whether to trim the space in the value.
 const TRIM_SPACE: bool = true;
+/// the base line number.  It starts from 0.
+const HEADER: usize = 0;
 
 /// GuessWidth reads records from printf-like output.
 pub struct GuessWidth {
@@ -45,8 +47,6 @@ pub struct GuessWidth {
     pub(crate) pre_lines: Vec<String>,
     // the number returned by read.
     pub(crate) pre_count: usize,
-    // the base line number. It starts from 0.
-    pub(crate) header: usize,
     // the maximum number of columns to split.
     pub(crate) limit_split: usize,
 }
@@ -59,7 +59,6 @@ impl GuessWidth {
             pos: Vec::new(),
             pre_lines: Vec::new(),
             pre_count: 0,
-            header: 0,
             limit_split: 0,
         }
     }
@@ -90,7 +89,7 @@ impl GuessWidth {
             self.pre_lines.push(line);
         }
 
-        self.pos = positions(&self.pre_lines, self.header, MIN_LINES);
+        self.pos = positions(&self.pre_lines, HEADER, MIN_LINES);
         if self.limit_split > 0 && self.pos.len() > self.limit_split {
             self.pos.truncate(self.limit_split);
         }
@@ -328,7 +327,6 @@ mod tests {
             pos: Vec::new(),
             pre_lines: Vec::new(),
             pre_count: 0,
-            header: 0,
             limit_split: 0,
         };
 
@@ -357,7 +355,6 @@ noborus   721971  0.0  0.0  13716  3524 pts/3    R+   10:39   0:00 ps aux";
             pos: Vec::new(),
             pre_lines: Vec::new(),
             pre_count: 0,
-            header: 0,
             limit_split: 0,
         };
 
@@ -386,7 +383,6 @@ noborus   721971  0.0  0.0  13716  3524 pts/3    R+   10:39   0:00 ps aux";
             pos: Vec::new(),
             pre_lines: Vec::new(),
             pre_count: 0,
-            header: 0,
             limit_split: 2,
         };
 
@@ -414,7 +410,6 @@ D:             104792064  17042676  87749388  17% /d";
             pos: Vec::new(),
             pre_lines: Vec::new(),
             pre_count: 0,
-            header: 0,
             limit_split: 0,
         };
 
